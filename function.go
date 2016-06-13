@@ -11,7 +11,8 @@ type Function struct {
 	Callable Callable
 
 	// For external Functions
-	Code *Code
+	Code   *Code
+	parent *Frame
 }
 
 // IsInternal tells whether this Function is implemented
@@ -28,11 +29,11 @@ func (f *Function) Call(args *args) Object {
 		return f.Callable(args)
 	}
 
-	frame := NewFrame(f.Code)
+	frame := NewFrame(f.Code, f.parent.names, nil)
 
 	if args != nil {
 		for i, value := range args.Positional {
-			name := f.Code.Varnames[i].(String)
+			name := f.Code.Varnames[i].(*String)
 			frame.names[name.string] = value
 		}
 		if len(args.Keyword) > 0 {
@@ -61,9 +62,10 @@ func NewInternalFunction(name string, callable Callable) Function {
 
 // NewExternalFunction allocates a new Function that encapsulates
 // CPython bytecode.
-func NewExternalFunction(name string, code *Code) Function {
+func NewExternalFunction(name string, code *Code, parent *Frame) Function {
 	return Function{
-		Name: name,
-		Code: code,
+		Name:   name,
+		Code:   code,
+		parent: parent,
 	}
 }

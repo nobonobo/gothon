@@ -11,6 +11,7 @@ type Frame struct {
 	stack  []Object
 	blocks []block
 	code   *Code
+	locals map[string]Object
 	names  map[string]Object
 }
 
@@ -87,16 +88,34 @@ func (f *Frame) Execute() Object {
 		case LOAD_CONST:
 			f.Push(f.code.Consts[first])
 		case STORE_NAME:
-			f.code.Names[first] = f.Pop()
+			name := f.code.Names[first].(*String).string
+			if f.names != nil {
+				f.names[name] = f.Pop()
+			} else if f.locals != nil {
+				f.locals[name] = f.Pop()
+			}
 		case LOAD_NAME:
-			f.Push(f.code.Names[first])
+			name := f.code.Names[first].(*String).string
+			if f.names != nil {
+				if v, ok := f.names[name]; ok {
+					f.Push(v)
+				}
+			} else if f.locals != nil {
+				if v, ok := f.locals[name]; ok {
+					f.Push(v)
+				}
+			} else {
+				panic("name error: " + name)
+			}
 		case LOAD_FAST:
-			name := f.code.Varnames[int(first)].(String).string
+			name := f.code.Varnames[int(first)].(*String).string
 			f.Push(f.names[name])
+		case MAKE_CLOSURE:
+			fallthrough
 		case MAKE_FUNCTION:
-			name := f.Pop().(String)
+			name := f.Pop().(*String)
 			code := f.Pop().(Code)
-			f.Push(NewExternalFunction(name.string, &code))
+			f.Push(NewExternalFunction(name.string, &code, f))
 		case CALL_FUNCTION:
 			if second > 0 {
 				panic("Keyword parameters are not implemented.")
@@ -114,17 +133,20 @@ func (f *Frame) Execute() Object {
 
 			if function, ok := o.(Function); ok {
 				f.Push(function.Call(&args))
-			} else if fname, ok := o.(String); ok {
-				value, isBuiltin := builtin[fname.string]
-
-				if isBuiltin {
-					f.Push(value)
+			} else if fname, ok := o.(*String); ok {
+				if v, ok := f.locals[fname.string]; ok {
+					f.Push(v)
+					function := v.(Function)
+					f.Push(function.Call(&args))
 				} else {
-					panic("can only resolve named functions to builtins")
+					if v, ok := f.names[fname.string]; ok {
+						f.Push(v)
+						function := v.(Function)
+						f.Push(function.Call(&args))
+					} else {
+						panic("not found key: " + fname.string)
+					}
 				}
-
-				function := value.(Function)
-				f.Push(function.Call(&args))
 			} else {
 				fmt.Fprintf(os.Stderr, "%+v", o)
 				panic("unknown function call")
@@ -141,17 +163,31 @@ func (f *Frame) Execute() Object {
 					f.Push(Int{a.int32 + b.int32})
 				}
 			}
+		case INPLACE_ADD:
+			right := f.Pop()
+			left := f.Pop()
+			fmt.Println(left, "+=", right)
+			switch a := left.(type) {
+			case Int:
+				f.Push(Int{a.int32 + right.(Int).int32})
+			case *String:
+				a.__add__(right.(*String))
+				fmt.Println(a)
+				f.Push(a)
+				//f.Push(String{a.string + right.(String).string})
+			default:
+				panic("not support type")
+			}
 		case RETURN_VALUE:
 			return f.Pop()
 		case LOAD_GLOBAL:
-			name := f.code.Names[first].(String).string
+			name := f.code.Names[first].(*String).string
 
-			value, isBuiltin := builtin[name]
-
-			if isBuiltin {
+			if value, ok := f.names[name]; ok {
 				f.Push(value)
 			} else {
-				panic("lookup of globals other than builtins not implemented")
+				fmt.Println(name, f.names)
+				panic("key not found")
 			}
 		case COMPARE_OP:
 			rightx := f.Pop()
@@ -194,8 +230,8 @@ func (f *Frame) Execute() Object {
 						panic("comparison operator not implemented.")
 					}
 				}
-			} else if right, ok := rightx.(String); ok {
-				if left, ok := leftx.(String); ok {
+			} else if right, ok := rightx.(*String); ok {
+				if left, ok := leftx.(*String); ok {
 					if first == OP_EQ || first == OP_IS {
 						if left.string == right.string {
 							f.Push(True{})
@@ -284,6 +320,8 @@ func (f *Frame) Execute() Object {
 			}
 			f.Push(a)
 		case JUMP_ABSOLUTE:
+			fallthrough
+		case JUMP_FORWARD:
 			pc = int(first)
 		case SETUP_LOOP:
 			block := &block{pc, pc + int(first)}
@@ -291,11 +329,11 @@ func (f *Frame) Execute() Object {
 		case POP_BLOCK:
 			f.blocks = f.blocks[:len(f.blocks)-1]
 		case STORE_FAST:
-			name := f.code.Varnames[int(first)].(String).string
+			name := f.code.Varnames[int(first)].(*String).string
 			f.names[name] = f.Pop()
 		default:
 			fmt.Sprintf("\x1b[31;1mSkipped\x1b[0m unknown opcode: %d\n", op)
-			panic(fmt.Sprintf("Unknown opcode: %d", op))
+			panic(fmt.Sprintf("Unknown opcode: %s(%d)", opcode[op], op))
 		}
 	}
 	return &Null{}
@@ -304,12 +342,21 @@ func (f *Frame) Execute() Object {
 // NewFrame constructs a new Frame to execute the passed code. This
 // allocates memory for the execution stack and sets everything
 // up.
-func NewFrame(code *Code) *Frame {
+func NewFrame(code *Code, globals, locals map[string]Object) *Frame {
 	f := new(Frame)
 	f.stack = make([]Object, 0)
 	// TODO(flowlo): What's a good capacity here?
 	f.blocks = make([]block, 0)
 	f.code = code
-	f.names = make(map[string]Object, 0)
+	if globals != nil {
+		f.names = globals
+	} else {
+		f.names = make(map[string]Object, 0)
+	}
+	if locals != nil {
+		f.locals = locals
+	} else {
+		f.locals = make(map[string]Object, 0)
+	}
 	return f
 }

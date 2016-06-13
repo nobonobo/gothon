@@ -128,12 +128,12 @@ func (r *Reader) readDict() Dictionary {
 	return dict
 }
 
-func (r *Reader) readString(t byte) String {
+func (r *Reader) readString(t byte) *String {
 	var size int32
 
 	if t == TYPE_STRINGREF {
 		binary.Read(r, binary.LittleEndian, &size)
-		return *r.module.Interns[int(size)]
+		return r.module.Interns[int(size)]
 	} else if t == TYPE_SHORT_ASCII || t == TYPE_SHORT_ASCII_INTERNED {
 		// TODO(flowlo): Handle error
 		tmp, _ := r.ReadByte()
@@ -146,10 +146,10 @@ func (r *Reader) readString(t byte) String {
 	var result = make([]byte, size)
 	r.Read(result)
 
-	s := String{string: string(result)}
+	s := &String{string: string(result)}
 
 	if t == TYPE_INTERNED || t == TYPE_ASCII_INTERNED || t == TYPE_SHORT_ASCII_INTERNED {
-		r.module.Interns = append(r.module.Interns, &s)
+		r.module.Interns = append(r.module.Interns, s)
 	}
 
 	return s
@@ -179,10 +179,10 @@ func (r *Reader) readCode() (code Code) {
 	code.Varnames = r.ReadObject().(Tuple)
 	code.Freevars = r.ReadObject().(Tuple)
 	code.Cellvars = r.ReadObject().(Tuple)
-	code.Filename = r.ReadObject().(String)
-	code.Name = r.ReadObject().(String)
+	code.Filename = r.ReadObject().(*String)
+	code.Name = r.ReadObject().(*String)
 	binary.Read(r, binary.LittleEndian, &code.Firstlineno)
-	code.Lnotab = r.ReadObject().(String)
+	code.Lnotab = r.ReadObject().(*String)
 	return
 }
 

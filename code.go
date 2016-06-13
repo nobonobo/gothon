@@ -24,11 +24,11 @@ type Code struct {
 	Freevars, // is a tuple containing the names of free variables
 	Cellvars Tuple // is a tuple containing the names of local variables that are referenced by nested functions
 
-	Filename String // is the filename from which the code was compiled
-	Name     String // gives the function name
+	Filename *String // is the filename from which the code was compiled
+	Name     *String // gives the function name
 
-	Firstlineno int32  // is the first line number of the function
-	Lnotab      String // is a string encoding the mapping from bytecode offsets to line numbers (for details see the source code of the interpreter)
+	Firstlineno int32   // is the first line number of the function
+	Lnotab      *String // is a string encoding the mapping from bytecode offsets to line numbers (for details see the source code of the interpreter)
 }
 
 func (code Code) String() string {

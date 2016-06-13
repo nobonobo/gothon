@@ -64,7 +64,7 @@ func main() {
 	}
 
 	module := NewModule(bufio.NewReader(file))
-	frame := NewFrame(module.Code)
+	frame := NewFrame(module.Code, builtin, nil)
 	frame.Execute()
 }
 
@@ -197,7 +197,7 @@ func repl() {
 		reader := NewReader(*bufio.NewReader(bytes.NewReader(raw)))
 		code := reader.ReadObject().(Code)
 
-		frame := NewFrame(&code)
+		frame := NewFrame(&code, builtin, nil)
 		frame.Execute()
 	}
 }

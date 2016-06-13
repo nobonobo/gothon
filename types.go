@@ -37,8 +37,12 @@ type String struct {
 	string
 }
 
-func (s String) String() string {
+func (s *String) String() string {
 	return "\"" + s.string + "\""
+}
+
+func (s *String) __add__(r *String) {
+	s.string += r.string
 }
 
 type Tuple []Object
